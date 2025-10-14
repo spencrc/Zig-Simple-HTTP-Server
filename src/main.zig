@@ -17,7 +17,7 @@ fn handleConnection(conn: *Connection) !void {
     var buffer: [8192]u8 = undefined;
 
     try request.read_request(conn, &buffer);
-    const req = try request.parse_request(buffer[0..buffer.len]);
+    const req = try request.parse_request(&buffer);
 
     var res = Response.init(conn);
 
