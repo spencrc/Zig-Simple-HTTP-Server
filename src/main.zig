@@ -1,7 +1,7 @@
 const std = @import("std");
 const sock = @import("socket.zig");
 const req = @import("request.zig");
-const res = @import("response.zig");
+const Response = @import("response.zig").Response;
 
 const Socket = sock.Socket;
 const Method = req.Method;
@@ -21,9 +21,13 @@ fn handleConnection(conn: std.net.Server.Connection) !void {
 
     if (request.method == Method.GET) {
         if (std.mem.eql(u8, request.uri, "/")) {
-            try res.send_200(conn);
+            const message = "<html><body><h1>Hello, World!</h1></body></html>";
+            const res = Response.init(conn, 200, message);
+            try res.write();
         } else {
-            try res.send_404(conn);
+            const message = "<html><body><h1>File not found!</h1></body></html>";
+            const res = Response.init(conn, 200, message);
+            try res.write();
         }
     }
 }
