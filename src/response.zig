@@ -10,14 +10,12 @@ const HEADER_TEMPLATE = //please see write function for what gets placed in form
 
 pub const Response = struct {
     conn: *Connection,
-    status: u16,
-    body: []const u8,
+    status: u16 = 200,
+    body: []const u8 = "",
 
-    pub fn init(conn: *Connection, status: u16, body: []const u8) Response {
+    pub fn init(conn: *Connection) Response {
         return Response{
             .conn = conn,
-            .status = status,
-            .body = body,
         };
     }
 
