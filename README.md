@@ -1,4 +1,5 @@
 # Zig-Simple-HTTP-Server
+[![assetpack](https://img.shields.io/badge/assetpack-blue)](https://github.com/silversquirl/assetpack/)
 
 ## Book Reference
 https://pedropark99.github.io/zig-book/Chapters/04-http-server.html
