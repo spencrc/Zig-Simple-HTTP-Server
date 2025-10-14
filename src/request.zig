@@ -3,10 +3,18 @@ const Connection = std.net.Server.Connection;
 
 pub const Method = enum {
     GET,
+    DELETE,
+    HEAD,
+    OPTIONS,
+    TRACE,
     UNKNOWN,
 
     pub fn init(text: []const u8) !Method {
         if (std.mem.eql(u8, text, "GET") or std.mem.eql(u8, text, "get")) return Method.GET;
+        if (std.mem.eql(u8, text, "DELETE") or std.mem.eql(u8, text, "delete")) return Method.DELETE;
+        if (std.mem.eql(u8, text, "HEAD") or std.mem.eql(u8, text, "head")) return Method.HEAD;
+        if (std.mem.eql(u8, text, "OPTIONS") or std.mem.eql(u8, text, "options")) return Method.OPTIONS;
+        if (std.mem.eql(u8, text, "TRACE") or std.mem.eql(u8, text, "trace")) return Method.TRACE;
         return Method.UNKNOWN;
     }
 };
@@ -21,7 +29,7 @@ const Request = struct {
     }
 };
 
-pub fn read_request(conn: Connection, buffer: []u8) !void {
+pub fn read_request(conn: *Connection, buffer: []u8) !void {
     var stream_reader = conn.stream.reader(buffer);
     var reader = stream_reader.interface();
 

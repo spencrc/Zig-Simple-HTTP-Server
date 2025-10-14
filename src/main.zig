@@ -10,7 +10,7 @@ var stdout_buffer: [1024]u8 = undefined;
 var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
 const stdout = &stdout_writer.interface;
 
-fn handleConnection(conn: std.net.Server.Connection) !void {
+fn handleConnection(conn: *std.net.Server.Connection) !void {
     //TODO: fix autocannon error: { errno -104, code 'ECONNRESET', syscall: 'read' }
 
     var buffer: [8192]u8 = undefined;
@@ -47,10 +47,10 @@ pub fn main() !void {
 
     while (true) {
         //TODO: add REAL threading here. code below is not good (and in fact slower), even though it works
-        const conn = try server.accept();
+        var conn = try server.accept();
         defer conn.stream.close();
         //const thread = try std.Thread.spawn(.{}, handleConnection, .{conn});
         //thread.detach();
-        try handleConnection(conn);
+        try handleConnection(&conn);
     }
 }
