@@ -1,0 +1,12 @@
+.{
+    .name = .Zig_Simple_HTTP_Server,
+    .version = "0.15.2",
+    .dependencies = .{
+        .assetpack = .{
+            .url = "git+https://github.com/silversquirl/assetpack#996cad7cb450314e59727c37601b153aaa050ac2",
+            .hash = "assetpack-0.1.0-5DA2d09lAAAW6vBR2pYjiDyCGMzmbcz2hfdyUs6iqf1G",
+        },
+    },
+    .paths = .{""},
+    .fingerprint = 0x68d292d34428719e,
+}
