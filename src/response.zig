@@ -21,7 +21,10 @@ pub const Response = struct {
 
     pub fn write(self: Response) !void {
         var header_buffer: [220]u8 = undefined;
-
+        //according to http.zig, 220 is enough for:
+        // - the status
+        // - Content-Length header or Transfer-Encoding header
+        // - http.zig's longest supported content type (we only have one rn lol)
         const headers = try std.fmt.bufPrint(header_buffer[0..], HEADER_TEMPLATE, .{
             self.status,
             self.body.len,
