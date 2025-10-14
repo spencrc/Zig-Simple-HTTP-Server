@@ -35,10 +35,10 @@ fn handleConnection(conn: std.net.Server.Connection) !void {
 pub fn main() !void {
     const socket = try Socket.init(.{
         .host = [4]u8{ 127, 0, 0, 1 },
-        .port = 3001,
+        .port = 3000,
     });
 
-    try stdout.print("Server Addr: ", .{});
+    try stdout.print("Server Addr: http://", .{});
     try socket.print_address(stdout);
     try stdout.print("\n", .{});
     try stdout.flush();
@@ -47,10 +47,10 @@ pub fn main() !void {
     defer server.deinit();
 
     while (true) {
-        //TODO: add REAL threading here. code below is not good, even though it works
+        //TODO: add REAL threading here. code below is not good (and in fact slower), even though it works
         const conn = try server.accept();
-        // const thread = try std.Thread.spawn(.{}, handleConnection, .{conn});
-        // thread.detach();
+        //const thread = try std.Thread.spawn(.{}, handleConnection, .{conn});
+        //thread.detach();
         try handleConnection(conn);
     }
 }
