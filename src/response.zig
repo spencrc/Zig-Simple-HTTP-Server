@@ -1,6 +1,5 @@
 const std = @import("std");
 const Connection = std.net.Server.Connection;
-
 const Writer = std.Io.Writer;
 
 const HEADER_TEMPLATE = //please see write function for what gets placed in formatting specifiers
