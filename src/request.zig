@@ -6,10 +6,8 @@ pub const Method = enum {
     UNKNOWN,
 
     pub fn init(text: []const u8) !Method {
-        _ = text;
-        return Method.GET;
-        //if (std.mem.eql(u8, text, "GET") or std.mem.eql(u8, text, "get")) return Method.GET;
-        //return Method.UNKNOWN;
+        if (std.mem.eql(u8, text, "GET") or std.mem.eql(u8, text, "get")) return Method.GET;
+        return Method.UNKNOWN;
     }
 };
 
