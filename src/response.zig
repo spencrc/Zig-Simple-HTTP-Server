@@ -1,8 +1,29 @@
 const std = @import("std");
 const Connection = std.net.Server.Connection;
 
+const Writer = std.Io.Writer;
+
+pub const Response = struct {
+    conn: Connection,
+    status: u16,
+    body: []u8,
+
+    pub fn init(conn: Connection, status: u16, body: []u8) Response {
+        return Response{
+            .conn = conn,
+            .status = status,
+            .body = body,
+        };
+    }
+
+    pub fn writer(self: Response) *Writer {
+        var stream_writer = self.conn.stream.writer(&.{});
+        return &stream_writer.interface;
+    }
+};
+
 pub fn send_200(conn: Connection) !void {
-    const message = ("HTTP/1.1 200 OK\n" ++
+    const message = ("HTTP/1.1 200\n" ++
         "Content-Length: 48\n" ++
         "Content-Type: text/html\n" ++
         "Connection: close\n" ++
