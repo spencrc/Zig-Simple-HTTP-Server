@@ -5,7 +5,7 @@
 https://pedropark99.github.io/zig-book/Chapters/04-http-server.html
 
 ## Building & Running
-Using Zig 0.15.1, you can build the project
+Using Zig 0.15.2, you can build the project
 ```
 zig build
 ```
