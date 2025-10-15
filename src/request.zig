@@ -8,7 +8,7 @@ pub const Method = enum {
     TRACE,
     UNKNOWN,
 
-    pub fn init(text: []const u8) !Method {
+    pub fn init(text: []const u8) Method {
         if (std.mem.eql(u8, text, "GET") or std.mem.eql(u8, text, "get")) return Method.GET;
         if (std.mem.eql(u8, text, "DELETE") or std.mem.eql(u8, text, "delete")) return Method.DELETE;
         if (std.mem.eql(u8, text, "HEAD") or std.mem.eql(u8, text, "head")) return Method.HEAD;
@@ -28,10 +28,11 @@ const Request = struct {
     }
 };
 
-pub fn read_request(stream: *std.net.Stream, buffer: []u8) !void {
+pub fn read_request(stream: *std.net.Stream, buffer: []u8) void {
     var stream_reader = stream.reader(buffer);
     var reader = stream_reader.interface();
 
+    //TODO: figure out a better alternative, since this will (almost randomly) throw error.EndOfStream
     while (reader.takeDelimiterExclusive('\n')) |line| {
         if (line.len == 0 or (line.len == 1 and line[0] == '\r')) {
             break;
@@ -46,13 +47,9 @@ pub fn parse_request(text: []u8) !Request {
 
     var iterator = std.mem.splitScalar(u8, text[0..line_index], ' ');
 
-    const method = try Method.init(iterator.next() orelse return error.InvalidRequest);
+    const method = Method.init(iterator.next() orelse return error.InvalidRequest);
     const uri = iterator.next() orelse return error.InvalidRequest;
     const version = iterator.next() orelse return error.InvalidRequest;
-
-    // std.debug.print("{any}\n", .{method});
-    // std.debug.print("{any}\n", .{uri});
-    // std.debug.print("{any}\n", .{version});
 
     const request = Request.init(method, uri, version);
     return request;

@@ -11,13 +11,16 @@ const Address = std.net.Address;
 //TODO: replace assetpack (it's good for now) with relative path file loading for hot loading
 var index_html: []const u8 = undefined;
 
-fn handleConnection(stream: *Stream) !void {
+fn handleConnection(stream: *Stream) void {
     //TODO: fix autocannon error: { errno -104, code 'ECONNRESET', syscall: 'read' }
 
     var buffer: [8192]u8 = undefined;
 
-    try request.read_request(stream, &buffer);
-    const req = try request.parse_request(&buffer);
+    request.read_request(stream, &buffer);
+    const req = request.parse_request(&buffer) catch |err| {
+        std.log.err("Invalid request when parsing: {any}", .{err});
+        return;
+    };
 
     var res = Response.init(stream);
 
@@ -25,12 +28,16 @@ fn handleConnection(stream: *Stream) !void {
         if (std.mem.eql(u8, req.uri, "/")) {
             res.body = index_html;
 
-            try res.write();
+            res.write() catch |err| {
+                std.log.err("Error when writing response: {any}", .{err});
+            };
         } else {
             res.status = 404;
             res.body = "<html><body><h1>File not found!</h1></body></html>";
 
-            try res.write();
+            res.write() catch |err| {
+                std.log.err("Error when writing response: {any}", .{err});
+            };
         }
     }
 }
@@ -75,6 +82,6 @@ pub fn main() !void {
 
         var stream: Stream = .{ .handle = conn_fd };
 
-        try handleConnection(&stream);
+        handleConnection(&stream);
     }
 }
