@@ -45,12 +45,38 @@ fn handleConnection(stream: *Stream) void {
     }
 }
 
+fn doWork(addr: Address) !void {
+    const sock_fd = try posix.socket(addr.any.family, posix.SOCK.STREAM, posix.IPPROTO.TCP);
+    defer posix.close(sock_fd);
+
+    try posix.setsockopt(sock_fd, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
+    try posix.setsockopt(sock_fd, posix.SOL.SOCKET, posix.SO.REUSEPORT, &std.mem.toBytes(@as(c_int, 1)));
+
+    try posix.bind(sock_fd, &addr.any, addr.getOsSockLen());
+    try posix.listen(sock_fd, 1024);
+
+    while (true) {
+        var address: Address = undefined;
+        var address_len: posix.socklen_t = @sizeOf(Address);
+        const conn_fd = posix.accept(sock_fd, &address.any, &address_len, posix.SOCK.CLOEXEC) catch |err| {
+            std.log.err("Failed to accept socket: {any}", .{err});
+            continue;
+        };
+        defer posix.close(conn_fd);
+
+        var stream: Stream = .{ .handle = conn_fd };
+
+        handleConnection(&stream);
+    }
+}
+
 pub fn main() !void {
     //TODO: cache files properly in a production setting
     index_html = try static.root.file("index.html"); //currently just pre-loads by setting global variable
 
     const host = [4]u8{ 127, 0, 0, 1 };
     const port = 3000;
+    const num_workers = 5;
 
     const addr = Address.initIp4(host, port);
 
@@ -65,26 +91,14 @@ pub fn main() !void {
         try stderr.flush();
     }
 
-    const sock_fd = try posix.socket(addr.any.family, posix.SOCK.STREAM, posix.IPPROTO.TCP);
-    defer posix.close(sock_fd);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    const threads = try allocator.alloc(std.Thread, num_workers);
+    defer allocator.free(threads);
 
-    try posix.setsockopt(sock_fd, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
-
-    try posix.bind(sock_fd, &addr.any, addr.getOsSockLen());
-    try posix.listen(sock_fd, 1024);
-
-    while (true) {
-        //TODO: add threading here
-        var address: Address = undefined;
-        var address_len: posix.socklen_t = @sizeOf(Address);
-        const conn_fd = posix.accept(sock_fd, &address.any, &address_len, posix.SOCK.CLOEXEC) catch |err| {
-            std.log.err("Failed to accept socket: {}", .{err});
-            continue;
-        };
-        defer posix.close(conn_fd);
-
-        var stream: Stream = .{ .handle = conn_fd };
-
-        handleConnection(&stream);
+    for (0..num_workers) |i| {
+        threads[i] = try std.Thread.spawn(.{}, doWork, .{addr});
     }
+
+    for (threads) |thread| thread.join();
 }
