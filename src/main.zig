@@ -1,29 +1,25 @@
 const std = @import("std");
-const socket = @import("socket.zig");
+const posix = std.posix;
 const request = @import("request.zig");
 const static = @import("static");
 
 const Response = @import("response.zig").Response;
-const Socket = socket.Socket;
 const Method = request.Method;
-const Connection = std.net.Server.Connection;
-
-var stdout_buffer: [1024]u8 = undefined;
-var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-const stdout = &stdout_writer.interface;
+const Stream = std.net.Stream;
+const Address = std.net.Address;
 
 //TODO: replace assetpack (it's good for now) with relative path file loading for hot loading
 var index_html: []const u8 = undefined;
 
-fn handleConnection(conn: *Connection) !void {
+fn handleConnection(stream: *Stream) !void {
     //TODO: fix autocannon error: { errno -104, code 'ECONNRESET', syscall: 'read' }
 
     var buffer: [8192]u8 = undefined;
 
-    try request.read_request(conn, &buffer);
+    try request.read_request(stream, &buffer);
     const req = try request.parse_request(&buffer);
 
-    var res = Response.init(conn);
+    var res = Response.init(stream);
 
     if (req.method == Method.GET) {
         if (std.mem.eql(u8, req.uri, "/")) {
@@ -43,25 +39,42 @@ pub fn main() !void {
     //TODO: cache files properly in a production setting
     index_html = try static.root.file("index.html"); //currently just pre-loads by setting global variable
 
-    const sock = try Socket.init(.{
-        .host = [4]u8{ 127, 0, 0, 1 },
-        .port = 3000,
-    });
+    const host = [4]u8{ 127, 0, 0, 1 };
+    const port = 3000;
 
-    try stdout.print("Server Addr: http://", .{});
-    try sock.print_address(stdout);
-    try stdout.print("\n", .{});
-    try stdout.flush();
+    const addr = Address.initIp4(host, port);
 
-    var server = try sock._address.listen(.{ .reuse_address = true });
-    defer server.deinit();
+    {
+        var buffer: [64]u8 = undefined;
+        const stderr = std.debug.lockStderrWriter(&buffer);
+        defer std.debug.unlockStderrWriter();
+
+        try stderr.print("Listening at http://", .{});
+        try addr.in.format(stderr);
+        try stderr.print("\n", .{});
+        try stderr.flush();
+    }
+
+    const sock_fd = try posix.socket(addr.any.family, posix.SOCK.STREAM, posix.IPPROTO.TCP);
+    defer posix.close(sock_fd);
+
+    try posix.setsockopt(sock_fd, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
+
+    try posix.bind(sock_fd, &addr.any, addr.getOsSockLen());
+    try posix.listen(sock_fd, 1024);
 
     while (true) {
-        //TODO: add REAL threading here. code below is not good (and in fact slower), even though it works
-        var conn = try server.accept();
-        defer conn.stream.close();
-        //const thread = try std.Thread.spawn(.{}, handleConnection, .{conn});
-        //thread.detach();
-        try handleConnection(&conn);
+        //TODO: add threading here
+        var address: Address = undefined;
+        var address_len: posix.socklen_t = @sizeOf(Address);
+        const conn_fd = posix.accept(sock_fd, &address.any, &address_len, posix.SOCK.CLOEXEC) catch |err| {
+            std.log.err("Failed to accept socket: {}", .{err});
+            continue;
+        };
+        defer posix.close(conn_fd);
+
+        var stream: Stream = .{ .handle = conn_fd };
+
+        try handleConnection(&stream);
     }
 }

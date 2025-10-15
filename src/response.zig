@@ -1,6 +1,6 @@
 const std = @import("std");
-const Connection = std.net.Server.Connection;
-const Writer = std.Io.Writer;
+
+const Stream = std.net.Stream;
 
 const HEADER_TEMPLATE = //please see write function for what gets placed in formatting specifiers
     "HTTP/1.1 {d} \r\n" ++
@@ -9,13 +9,13 @@ const HEADER_TEMPLATE = //please see write function for what gets placed in form
     "Connection: close \r\n\r\n";
 
 pub const Response = struct {
-    conn: *Connection,
+    stream: *Stream,
     status: u16 = 200,
     body: []const u8 = "",
 
-    pub fn init(conn: *Connection) Response {
+    pub fn init(stream: *Stream) Response {
         return Response{
-            .conn = conn,
+            .stream = stream,
         };
     }
 
@@ -30,7 +30,7 @@ pub const Response = struct {
             self.body.len,
         });
 
-        var stream_writer = self.conn.stream.writer(&.{});
+        var stream_writer = self.stream.writer(&.{});
         const writer = &stream_writer.interface;
         _ = try writer.writeVec(&.{ headers, self.body });
     }

@@ -1,5 +1,4 @@
 const std = @import("std");
-const Connection = std.net.Server.Connection;
 
 pub const Method = enum {
     GET,
@@ -29,8 +28,8 @@ const Request = struct {
     }
 };
 
-pub fn read_request(conn: *Connection, buffer: []u8) !void {
-    var stream_reader = conn.stream.reader(buffer);
+pub fn read_request(stream: *std.net.Stream, buffer: []u8) !void {
+    var stream_reader = stream.reader(buffer);
     var reader = stream_reader.interface();
 
     while (reader.takeDelimiterExclusive('\n')) |line| {
@@ -38,7 +37,7 @@ pub fn read_request(conn: *Connection, buffer: []u8) !void {
             break;
         }
     } else |err| {
-        std.debug.print("{any}\n", .{err});
+        std.log.err("{any}\n", .{err});
     }
 }
 
