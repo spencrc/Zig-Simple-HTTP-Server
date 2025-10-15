@@ -38,7 +38,7 @@ pub fn read_request(stream: *std.net.Stream, buffer: []u8) void {
             break;
         }
     } else |err| {
-        std.log.err("{any}\n", .{err});
+        std.log.err("Reached the end of stream: {any}", .{err});
     }
 }
 
