@@ -14,13 +14,16 @@ var index_html: []const u8 = undefined;
 fn handleConnection(stream: *Stream) void {
     //TODO: fix autocannon error: { errno -104, code 'ECONNRESET', syscall: 'read' }
 
-    var buffer: [8192]u8 = undefined;
+    var buffer: [4096]u8 = undefined;
+    @memset(&buffer, 0); //done to make buffer readable
 
     request.read_request(stream, &buffer);
     const req = request.parse_request(&buffer) catch |err| {
         std.log.err("Invalid request when parsing: {any}", .{err});
         return;
     };
+
+    std.debug.print("\nClient Request\n{s}\n\n", .{buffer}); //view contents of buffer after reading/parsing is done
 
     var res = Response.init(stream);
 
