@@ -124,8 +124,8 @@ fn submit_read_request(self: *Server, socket: posix.socket_t) !void {
 
 fn handle_client_request(self: *Server, req: *Request) !void {
     //std.debug.print("\nClient Request\n{s}\n\n", .{req.reading_buffer[0..bytes_read]}); //view contents of buffer after reading/parsing is done
-    const parsed_req = http_request.parse_request(&req.reading_buffer) catch {
-        std.log.err("invalid request when parsing", .{});
+    const parsed_req = http_request.parse_http_request(&req.reading_buffer) catch {
+        std.log.err("invalid HTTP request when parsing", .{});
         posix.close(req.client_socket);
         return;
     };

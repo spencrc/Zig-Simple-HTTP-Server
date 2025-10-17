@@ -18,25 +18,25 @@ pub const Method = enum {
     }
 };
 
-const Request = struct {
+const HttpRequest = struct {
     method: Method,
     version: []const u8,
     uri: []const u8,
 
-    pub fn init(method: Method, uri: []const u8, version: []const u8) Request {
-        return Request{ .method = method, .uri = uri, .version = version };
+    pub fn init(method: Method, uri: []const u8, version: []const u8) HttpRequest {
+        return HttpRequest{ .method = method, .uri = uri, .version = version };
     }
 };
 
-pub fn parse_request(text: []u8) !Request {
+pub fn parse_http_request(text: []u8) !HttpRequest {
     const line_index = std.mem.indexOfScalar(u8, text, '\n') orelse text.len;
 
     var iterator = std.mem.splitScalar(u8, text[0..line_index], ' ');
 
-    const method = Method.init(iterator.next() orelse return error.InvalidRequest);
-    const uri = iterator.next() orelse return error.InvalidRequest;
-    const version = iterator.next() orelse return error.InvalidRequest;
+    const method = Method.init(iterator.next() orelse return error.InvalidHttpRequest);
+    const uri = iterator.next() orelse return error.InvalidHttpRequest;
+    const version = iterator.next() orelse return error.InvalidHttpRequest;
 
-    const request = Request.init(method, uri, version);
+    const request = HttpRequest.init(method, uri, version);
     return request;
 }
