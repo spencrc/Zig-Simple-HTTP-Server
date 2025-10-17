@@ -28,20 +28,6 @@ const Request = struct {
     }
 };
 
-pub fn read_request(stream: *std.net.Stream, buffer: []u8) void {
-    var stream_reader = stream.reader(buffer);
-    var reader = stream_reader.interface();
-
-    //TODO: figure out a better alternative, since this will (almost randomly) throw error.EndOfStream
-    while (reader.takeDelimiterExclusive('\n')) |line| {
-        if (line.len == 0 or (line.len == 1 and line[0] == '\r')) {
-            break;
-        }
-    } else |err| {
-        std.log.err("Reached the end of stream: {any}", .{err});
-    }
-}
-
 pub fn parse_request(text: []u8) !Request {
     const line_index = std.mem.indexOfScalar(u8, text, '\n') orelse text.len;
 
