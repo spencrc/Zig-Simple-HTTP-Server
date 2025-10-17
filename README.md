@@ -1,9 +1,6 @@
 # Zig-Simple-HTTP-Server
 [![assetpack](https://img.shields.io/badge/assetpack-blue)](https://github.com/silversquirl/assetpack/)
 
-## Book Reference
-https://pedropark99.github.io/zig-book/Chapters/04-http-server.html
-
 ## Building & Running
 Using Zig 0.15.2, you can build the project
 ```
@@ -14,7 +11,11 @@ This will produce an executable. You can run the executable itself, or build and
 zig build run
 ```
 
-## Note
-The majority of this project, as of writing, is not my own code. I am using this project to help me learn Zig. The goal is to create a fully functional HTTP server, and to share this repository as a resource for those interested in learning Zig and creating HTTP servers within Zig.
-
-Please see the book reference above for the original author, or any linked repositories in specific files to see where specific code originates from. 
+## Resources
+Here's a list of resources I used to help me create this project!
+- https://pedropark99.github.io/zig-book/Chapters/04-http-server.html
+- https://codeberg.org/dude_the_builder/subzed
+- https://unixism.net/loti/tutorial/webserver_liburing.html
+- https://github.com/karlseguin/http.zig
+- https://www.openmymind.net/TCP-Server-In-Zig-Part-1-Single-Threaded/
+- https://github.com/ziglang/zig/blob/master/lib/std/os/linux/IoUring.zig
