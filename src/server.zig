@@ -72,7 +72,7 @@ pub fn run(self: *Server, address: std.net.Address) !void {
 
     var client_address: posix.sockaddr = undefined;
     var client_address_len: posix.socklen_t = @sizeOf(posix.sockaddr);
-    try self.addAcceptRequest(listener, &client_address, &client_address_len);
+    try self.submit_accept_request(listener, &client_address, &client_address_len);
 
     while (true) {
         //TODO: add threading here
@@ -86,9 +86,9 @@ pub fn run(self: *Server, address: std.net.Address) !void {
 
         switch (req.event_type) {
             .ACCEPT => {
-                try self.addAcceptRequest(listener, &client_address, &client_address_len);
+                try self.submit_accept_request(listener, &client_address, &client_address_len);
                 self.req_pool.destroy(req);
-                try self.addReadRequest(cqe.res);
+                try self.submit_read_request(cqe.res);
             },
             .READ => {
                 if (cqe.res <= 0) { //res = 0 is an empty result! anything less than 0 is an error
@@ -96,7 +96,7 @@ pub fn run(self: *Server, address: std.net.Address) !void {
                     self.req_pool.destroy(req);
                     continue;
                 }
-                try self.handleRequest(req);
+                try self.handle_client_request(req);
 
                 self.req_pool.destroy(req);
             },
@@ -109,7 +109,7 @@ pub fn run(self: *Server, address: std.net.Address) !void {
     }
 }
 
-fn addAcceptRequest(self: *Server, listener: posix.socket_t, client_address: *posix.sockaddr, client_address_len: *posix.socklen_t) !void {
+fn submit_accept_request(self: *Server, listener: posix.socket_t, client_address: *posix.sockaddr, client_address_len: *posix.socklen_t) !void {
     const req: *Request = try self.req_pool.create();
     req.event_type = EventType.ACCEPT;
 
@@ -119,7 +119,7 @@ fn addAcceptRequest(self: *Server, listener: posix.socket_t, client_address: *po
     _ = try self.ring.submit();
 }
 
-fn addReadRequest(self: *Server, socket: posix.socket_t) !void {
+fn submit_read_request(self: *Server, socket: posix.socket_t) !void {
     const req: *Request = try self.req_pool.create();
     req.event_type = EventType.READ;
     req.client_socket = socket;
@@ -132,7 +132,7 @@ fn addReadRequest(self: *Server, socket: posix.socket_t) !void {
     _ = try self.ring.submit();
 }
 
-fn handleRequest(self: *Server, req: *Request) !void {
+fn handle_client_request(self: *Server, req: *Request) !void {
     //std.debug.print("\nClient Request\n{s}\n\n", .{req.reading_buffer[0..bytes_read]}); //view contents of buffer after reading/parsing is done
     const parsed_req = http_request.parse_request(&req.reading_buffer) catch {
         std.log.err("invalid request when parsing", .{});
@@ -149,14 +149,14 @@ fn handleRequest(self: *Server, req: *Request) !void {
             res.status = 404;
             res.body = "<html><body><h1>File not found!</h1></body></html>";
         }
-        try self.addWriteRequest(req.client_socket, res);
+        try self.submit_write_request(req.client_socket, res);
     } else {
         std.log.warn("encountered a non GET method!", .{});
         posix.close(req.client_socket);
     }
 }
 
-fn addWriteRequest(self: *Server, client_socket: posix.socket_t, res: Response) !void {
+fn submit_write_request(self: *Server, client_socket: posix.socket_t, res: Response) !void {
     const req: *Request = try self.req_pool.create();
     req.event_type = EventType.WRITE;
     req.client_socket = client_socket;
