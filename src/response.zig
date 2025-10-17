@@ -1,4 +1,5 @@
 const std = @import("std");
+const posix = std.posix;
 
 const Stream = std.net.Stream;
 
@@ -9,17 +10,15 @@ const HEADER_TEMPLATE = //please see write function for what gets placed in form
     "Connection: close \r\n\r\n";
 
 pub const Response = struct {
-    stream: *Stream,
     status: u16 = 200,
     body: []const u8 = "",
+    headers: []u8 = undefined,
 
-    pub fn init(stream: *Stream) Response {
-        return Response{
-            .stream = stream,
-        };
+    pub fn init() Response {
+        return .{};
     }
 
-    pub fn write(self: Response) !void {
+    pub fn prepareHeaders(self: *Response, allocator: std.mem.Allocator) !void {
         var header_buffer: [220]u8 = undefined;
         //according to http.zig, 220 is enough for:
         // - the status
@@ -30,8 +29,11 @@ pub const Response = struct {
             self.body.len,
         });
 
-        var stream_writer = self.stream.writer(&.{});
-        const writer = &stream_writer.interface;
-        _ = try writer.writeVec(&.{ headers, self.body });
+        self.headers = try allocator.alloc(u8, headers.len);
+        @memcpy(self.headers, headers);
+
+        // var stream_writer = self.stream.writer(&.{});
+        // const writer = &stream_writer.interface;
+        // _ = try writer.writeVec(&.{ headers, self.body });
     }
 };
