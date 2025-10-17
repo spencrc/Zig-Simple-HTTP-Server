@@ -16,9 +16,14 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "example",
+        .name = "http_server",
         .root_module = exe_mod,
     });
+
+    exe.root_module.addAnonymousImport("config", .{
+        .root_source_file = b.path("config.zon"),
+    });
+
     b.installArtifact(exe);
 
     const run_artifact = b.addRunArtifact(exe);

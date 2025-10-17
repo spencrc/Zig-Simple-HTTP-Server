@@ -52,20 +52,10 @@ pub fn deinit(self: *Server) void {
 pub fn run(self: *Server, address: std.net.Address) !void {
     index_html = try static.root.file("index.html"); //currently just pre-loads by setting global variable
 
-    {
-        var buffer: [64]u8 = undefined;
-        const stderr = std.debug.lockStderrWriter(&buffer);
-        defer std.debug.unlockStderrWriter();
-
-        try stderr.print("Listening at http://", .{});
-        try address.in.format(stderr);
-        try stderr.print("\n", .{});
-        try stderr.flush();
-    }
-
     const listener = try posix.socket(address.any.family, posix.SOCK.STREAM | posix.SOCK.CLOEXEC, posix.IPPROTO.TCP);
 
     try posix.setsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
+    try posix.setsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEPORT, &std.mem.toBytes(@as(c_int, 1)));
 
     try posix.bind(listener, &address.any, address.getOsSockLen());
     try posix.listen(listener, 1024);
