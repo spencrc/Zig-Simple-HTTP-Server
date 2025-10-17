@@ -1,90 +1,31 @@
 const std = @import("std");
-const posix = std.posix;
-const request = @import("request.zig");
-const static = @import("static");
-
-const Response = @import("response.zig").Response;
-const Method = request.Method;
-const Stream = std.net.Stream;
-const Address = std.net.Address;
-
-//TODO: replace assetpack (it's good for now) with relative path file loading for hot loading
-var index_html: []const u8 = undefined;
-
-fn handleConnection(stream: *Stream) void {
-    //TODO: fix autocannon error: { errno -104, code 'ECONNRESET', syscall: 'read' }
-
-    var buffer: [4096]u8 = undefined;
-    @memset(&buffer, 0); //done to make buffer readable
-
-    request.read_request(stream, &buffer);
-    const req = request.parse_request(&buffer) catch |err| {
-        std.log.err("Invalid request when parsing: {any}", .{err});
-        return;
-    };
-
-    std.debug.print("\nClient Request\n{s}\n\n", .{buffer}); //view contents of buffer after reading/parsing is done
-
-    var res = Response.init(stream);
-
-    if (req.method == Method.GET) {
-        if (std.mem.eql(u8, req.uri, "/")) {
-            res.body = index_html;
-
-            res.write() catch |err| {
-                std.log.err("Error when writing response: {any}", .{err});
-            };
-        } else {
-            res.status = 404;
-            res.body = "<html><body><h1>File not found!</h1></body></html>";
-
-            res.write() catch |err| {
-                std.log.err("Error when writing response: {any}", .{err});
-            };
-        }
-    }
-}
+const Worker = @import("worker.zig");
+const config = @import("config");
 
 pub fn main() !void {
-    //TODO: cache files properly in a production setting
-    index_html = try static.root.file("index.html"); //currently just pre-loads by setting global variable
-
-    const host = [4]u8{ 127, 0, 0, 1 };
-    const port = 3000;
-
-    const addr = Address.initIp4(host, port);
+    const address = try std.net.Address.parseIp(config.host, config.port);
 
     {
         var buffer: [64]u8 = undefined;
         const stderr = std.debug.lockStderrWriter(&buffer);
         defer std.debug.unlockStderrWriter();
 
-        try stderr.print("Listening at http://", .{});
-        try addr.in.format(stderr);
+        try stderr.print("Listening with {d} workers at http://", .{config.num_workers});
+        try address.in.format(stderr);
         try stderr.print("\n", .{});
         try stderr.flush();
     }
 
-    const sock_fd = try posix.socket(addr.any.family, posix.SOCK.STREAM, posix.IPPROTO.TCP);
-    defer posix.close(sock_fd);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    const threads = try allocator.alloc(std.Thread, config.num_workers);
+    defer allocator.free(threads);
 
-    try posix.setsockopt(sock_fd, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
-
-    try posix.bind(sock_fd, &addr.any, addr.getOsSockLen());
-    try posix.listen(sock_fd, 1024);
-
-    while (true) {
-        //TODO: add threading here
-        var address: Address = undefined;
-        var address_len: posix.socklen_t = @sizeOf(Address);
-        const conn_fd = posix.accept(sock_fd, &address.any, &address_len, posix.SOCK.CLOEXEC) catch |err| {
-            std.log.err("Failed to accept socket: {}", .{err});
-            continue;
-        };
-        defer posix.close(conn_fd);
-
-        var stream: Stream = .{ .handle = conn_fd };
-
-        handleConnection(&stream);
+    for (0..config.num_workers) |i| {
+        threads[i] = try std.Thread.spawn(.{}, Worker.work, .{ address, allocator });
     }
+
+    for (threads) |thread| thread.join();
+
+    std.debug.print("STOPPED\n", .{});
 }
