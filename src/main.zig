@@ -22,7 +22,7 @@ pub fn main() !void {
     defer allocator.free(threads);
 
     for (0..config.num_workers) |i| {
-        threads[i] = try std.Thread.spawn(.{}, Worker.work, .{ address, allocator });
+        threads[i] = try std.Thread.spawn(.{}, Worker.work, .{address});
     }
 
     for (threads) |thread| thread.join();

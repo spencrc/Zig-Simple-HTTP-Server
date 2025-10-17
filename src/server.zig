@@ -21,7 +21,7 @@ const Request = struct {
     event_type: EventType = undefined,
     client_socket: posix.socket_t = undefined,
     iovecs: [2]posix.iovec_const = undefined,
-    reading_buffer: [4096]u8 = undefined,
+    reading_buffer: [2048]u8 = undefined,
     header_buffer: [220]u8 = undefined,
     body: []const u8 = "",
     headers: []u8 = undefined,
@@ -31,7 +31,6 @@ const Request = struct {
 var index_html: []const u8 = undefined;
 
 ring: IoUring,
-allocator: std.mem.Allocator,
 req_pool: std.heap.MemoryPool(Request),
 
 pub fn init(allocator: std.mem.Allocator) !Server {
@@ -39,7 +38,6 @@ pub fn init(allocator: std.mem.Allocator) !Server {
 
     return .{
         .ring = ring,
-        .allocator = allocator,
         .req_pool = std.heap.MemoryPool(Request).init(allocator),
     };
 }
@@ -62,7 +60,8 @@ pub fn run(self: *Server, address: std.net.Address) !void {
 
     var client_address: posix.sockaddr = undefined;
     var client_address_len: posix.socklen_t = @sizeOf(posix.sockaddr);
-    try self.submit_accept_request(listener, &client_address, &client_address_len);
+    try self.queue_accept_request(listener, &client_address, &client_address_len);
+    _ = try self.ring.submit();
 
     while (true) {
         //TODO: add threading here
@@ -76,9 +75,10 @@ pub fn run(self: *Server, address: std.net.Address) !void {
 
         switch (req.event_type) {
             .ACCEPT => {
-                try self.submit_accept_request(listener, &client_address, &client_address_len);
+                try self.queue_accept_request(listener, &client_address, &client_address_len);
                 self.req_pool.destroy(req);
-                try self.submit_read_request(cqe.res);
+                try self.queue_read_request(cqe.res);
+                _ = try self.ring.submit();
             },
             .READ => {
                 if (cqe.res <= 0) { //res = 0 is an empty result! anything less than 0 is an error
@@ -99,27 +99,25 @@ pub fn run(self: *Server, address: std.net.Address) !void {
     }
 }
 
-fn submit_accept_request(self: *Server, listener: posix.socket_t, client_address: *posix.sockaddr, client_address_len: *posix.socklen_t) !void {
+fn queue_accept_request(self: *Server, listener: posix.socket_t, client_address: *posix.sockaddr, client_address_len: *posix.socklen_t) !void {
     const req: *Request = try self.req_pool.create();
     req.event_type = EventType.ACCEPT;
 
     const user_data = @intFromPtr(req);
 
     _ = try self.ring.accept(user_data, listener, client_address, client_address_len, 0);
-    _ = try self.ring.submit();
 }
 
-fn submit_read_request(self: *Server, socket: posix.socket_t) !void {
+fn queue_read_request(self: *Server, socket: posix.socket_t) !void {
     const req: *Request = try self.req_pool.create();
     req.event_type = EventType.READ;
     req.client_socket = socket;
 
     const user_data = @intFromPtr(req);
 
-    const read_buffer = IoUring.ReadBuffer{ .buffer = req.reading_buffer[0..4096] };
+    const read_buffer = IoUring.ReadBuffer{ .buffer = req.reading_buffer[0..2048] };
 
     _ = try self.ring.read(user_data, req.client_socket, read_buffer, 0);
-    _ = try self.ring.submit();
 }
 
 fn handle_client_request(self: *Server, req: *Request) !void {
