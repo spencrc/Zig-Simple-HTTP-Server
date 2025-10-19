@@ -192,3 +192,119 @@ pub fn parse(data: []const u8) !HttpRequest {
 
     return req;
 }
+
+test "basic" {
+    const data = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\nHello";
+    const req = try parse(data);
+    try std.testing.expect(req.method == Method.GET);
+
+    try std.testing.expect(req.uri.fragment == null);
+    try std.testing.expect(req.uri.query == null);
+    try std.testing.expect(std.mem.eql(u8, req.uri.path, "/"));
+
+    try std.testing.expect(req.version == 1);
+
+    try std.testing.expect(req.headers_size == 1);
+    try std.testing.expect(std.mem.eql(u8, req.headers[0].name, "Host"));
+    try std.testing.expect(std.mem.eql(u8, req.headers[0].value, "localhost"));
+}
+
+test "basic but big" {
+    const data =
+        "GET /api/v1/resource?id=12345&filter=active&sort=desc HTTP/1.1\r\n" ++
+        "Host: benchmark.example.com\r\n" ++
+        "User-Agent: ZigHTTPBench/1.0 (Zig; +https://ziglang.org)\r\n" ++
+        "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n" ++
+        "Accept-Language: en-US,en;q=0.9\r\n" ++
+        "Accept-Encoding: gzip, deflate, br\r\n" ++
+        "Cache-Control: no-cache\r\n" ++
+        "Pragma: no-cache\r\n" ++
+        "Connection: keep-alive\r\n" ++
+        "Upgrade-Insecure-Requests: 1\r\n" ++
+        "Sec-Fetch-Dest: document\r\n" ++
+        "Sec-Fetch-Mode: navigate\r\n" ++
+        "Sec-Fetch-Site: none\r\n" ++
+        "Sec-Fetch-User: ?1\r\n" ++
+        "X-Forwarded-For: 192.168.0.100, 10.0.0.2\r\n" ++
+        "X-Request-ID: 550e8400-e29b-41d4-a716-446655440000\r\n" ++
+        "X-Trace-ID: abcd1234efgh5678ijkl9012mnop3456\r\n" ++
+        "X-Custom-Metric: 1234567890\r\n" ++
+        "X-Large-Header: " ++
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" ++ "\r\n" ++
+        "Referer: https://benchmark.example.com/dashboard\r\n" ++
+        "If-Modified-Since: Wed, 21 Oct 2015 07:28:00 GMT\r\n" ++
+        "If-None-Match: \"33a64df551425fcc55e4d42a148795d9f25f89d4\"\r\n" ++
+        "DNT: 1\r\n" ++
+        "\r\n";
+    const req = try parse(data);
+    try std.testing.expect(req.method == Method.GET);
+
+    try std.testing.expect(req.uri.fragment == null);
+    try std.testing.expect(std.mem.eql(u8, req.uri.query.?, "id=12345&filter=active&sort=desc"));
+    try std.testing.expect(std.mem.eql(u8, req.uri.path, "/api/v1/resource"));
+
+    try std.testing.expect(req.version == 1);
+
+    try std.testing.expect(req.headers_size == 1);
+    try std.testing.expect(std.mem.eql(u8, req.headers[0].name, "Host"));
+    try std.testing.expect(std.mem.eql(u8, req.headers[0].value, "benchmark.example.com"));
+}
+
+test "empty buffer" {
+    const data = "";
+    try std.testing.expectError(error.EmptyBuffer, parse(data));
+}
+
+test "GET method" {
+    const data = "GET";
+    var pos: usize = 0;
+    const method = try parse_method(data, &pos);
+    try std.testing.expect(method == .GET);
+}
+
+test "POST method" {
+    const data = "POST";
+    var pos: usize = 0;
+    const method = try parse_method(data, &pos);
+    try std.testing.expect(method == .POST);
+}
+
+test "DELETE method" {
+    const data = "DELETE";
+    var pos: usize = 0;
+    const method = try parse_method(data, &pos);
+    try std.testing.expect(method == .DELETE);
+}
+
+test "basic uri" {
+    const data = "/foo?bar=true&fizz=false#buzz";
+    const uri = parse_uri(data);
+    try std.testing.expect(std.mem.eql(u8, uri.fragment.?, "buzz"));
+    try std.testing.expect(std.mem.eql(u8, uri.query.?, "bar=true&fizz=false"));
+    try std.testing.expect(std.mem.eql(u8, uri.path, "/foo"));
+}
+
+test "basic request line with bad version" {
+    const data = "GET / HTXP/1.1";
+    try std.testing.expectError(error.InvalidVersionPrefix, parse(data));
+}
+
+test "basic request line with bad version number" {
+    const data = "GET / HTTP/1.2";
+    try std.testing.expectError(error.InvalidVersion, parse(data));
+}
+
+test "basic request line with no version dot" {
+    const data = "GET / HTTP/11 ";
+    try std.testing.expectError(error.MissingVersionDot, parse(data));
+}
+
+test "basic request line with unsupported version" {
+    const data = "GET / HTTP/2";
+    try std.testing.expectError(error.HTTPVersionNotSupported, parse(data));
+}
+
+test "missing trailing character" {
+    const data = "GET / HTTP/1.1";
+    try std.testing.expectError(error.MissingCRLF, parse(data));
+}
