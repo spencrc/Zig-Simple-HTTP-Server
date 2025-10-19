@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Worker = @import("worker.zig");
 const config = @import("config");
 
@@ -16,13 +17,24 @@ pub fn main() !void {
         try stderr.flush();
     }
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    //taken from here: https://ziglang.org/download/0.14.0/release-notes.html#SmpAllocator
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const allocator, const is_debug = allocator: {
+        if (builtin.os.tag == .wasi) break :allocator .{ std.heap.wasm_allocator, false };
+        break :allocator switch (builtin.mode) {
+            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+        };
+    };
+    defer if (is_debug) {
+        _ = debug_allocator.deinit();
+    };
+
     const threads = try allocator.alloc(std.Thread, config.num_workers);
     defer allocator.free(threads);
 
     for (0..config.num_workers) |i| {
-        threads[i] = try std.Thread.spawn(.{}, Worker.work, .{address});
+        threads[i] = try std.Thread.spawn(.{}, Worker.work, .{ address, allocator });
     }
 
     for (threads) |thread| thread.join();
