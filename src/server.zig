@@ -3,6 +3,7 @@ const Server = @This();
 const std = @import("std");
 const posix = std.posix;
 const static = @import("static");
+const config = @import("config");
 
 const IoUring = std.os.linux.IoUring;
 const http_request = @import("http_request.zig");
@@ -21,7 +22,6 @@ const Request = struct {
     event_type: EventType = undefined,
     client_socket: posix.socket_t = undefined,
     iovecs: [2]posix.iovec_const = undefined,
-    reading_buffer: [2048]u8 = undefined,
     header_buffer: [220]u8 = undefined,
     body: []const u8 = "",
     headers: []u8 = undefined,
@@ -32,6 +32,8 @@ var index_html: []const u8 = undefined;
 
 ring: IoUring,
 req_pool: std.heap.MemoryPool(Request),
+read_buffers: [config.num_read_buffers][config.read_buffer_length]u8 = undefined,
+read_buffers_left: usize = 0,
 
 pub fn init(allocator: std.mem.Allocator) !Server {
     const ring = try IoUring.init(4096, 0);
@@ -58,6 +60,8 @@ pub fn run(self: *Server, address: std.net.Address) !void {
     try posix.bind(listener, &address.any, address.getOsSockLen());
     try posix.listen(listener, 1024);
 
+    _ = try self.ring.provide_buffers(0xbf, @ptrCast(&self.read_buffers), config.read_buffer_length, config.num_read_buffers, config.read_buffer_group_id, 0);
+
     var client_address: posix.sockaddr = undefined;
     var client_address_len: posix.socklen_t = @sizeOf(posix.sockaddr);
     try self.queue_accept_request(listener, &client_address, &client_address_len);
@@ -66,10 +70,26 @@ pub fn run(self: *Server, address: std.net.Address) !void {
     while (true) {
         //TODO: add threading here
         const cqe = try self.ring.copy_cqe();
-        const req: *Request = @ptrFromInt(cqe.user_data);
 
+        if (cqe.user_data == 0xbf) { //0xbf is the special code for when all buffers handled via provide_buffers completion
+            if (cqe.res == 0) { //0 means success here (https://ziglang.org/documentation/master/std/#std.os.linux.E)!
+                self.read_buffers_left = config.num_read_buffers; //all buffers available again
+                continue;
+            } else {
+                return;
+            }
+        } else if (cqe.user_data == 0xbf1) { //0xbf1 is the special code for when just one buffer handled by provide_buffers completion
+            if (cqe.res == 0) { //0 means success here (https://ziglang.org/documentation/master/std/#std.os.linux.E)!
+                self.read_buffers_left += 1; //one more buffer available
+                continue;
+            } else {
+                return;
+            }
+        }
+
+        const req: *Request = @ptrFromInt(cqe.user_data);
         if (cqe.res < 0) {
-            std.log.err("Async requested failed: {d} for event {any}\n", .{ cqe.res, req.event_type });
+            std.log.err("async requested failed - {d} for event {any}\n", .{ cqe.res, req.event_type });
             return;
         }
 
@@ -86,7 +106,19 @@ pub fn run(self: *Server, address: std.net.Address) !void {
                     self.req_pool.destroy(req);
                     continue;
                 }
-                try self.handle_client_request(req);
+
+                const buffer_id = try cqe.buffer_id();
+                const read_length: usize = @intCast(cqe.res);
+                try self.handle_client_request(req, buffer_id, read_length);
+
+                _ = try self.ring.provide_buffers(
+                    0xbf1,
+                    @ptrCast(&self.read_buffers[buffer_id]),
+                    config.read_buffer_length,
+                    1, // only one buffer
+                    config.read_buffer_group_id,
+                    buffer_id,
+                );
 
                 self.req_pool.destroy(req);
             },
@@ -115,14 +147,15 @@ fn queue_read_request(self: *Server, socket: posix.socket_t) !void {
 
     const user_data = @intFromPtr(req);
 
-    const read_buffer = IoUring.ReadBuffer{ .buffer = req.reading_buffer[0..2048] };
+    self.read_buffers_left -= 1;
+    const read_buffer = IoUring.ReadBuffer{ .buffer_selection = .{ .group_id = config.read_buffer_group_id, .len = config.read_buffer_length } };
 
-    _ = try self.ring.read(user_data, req.client_socket, read_buffer, 0);
+    _ = try self.ring.read(user_data, req.client_socket, read_buffer, 0); //for whatever reason, read seems to be more stable than recv during benchmarking
 }
 
-fn handle_client_request(self: *Server, req: *Request) !void {
+fn handle_client_request(self: *Server, req: *Request, buffer_id: u16, read_length: usize) !void {
     //std.debug.print("\nClient Request\n{s}\n\n", .{req.reading_buffer[0..bytes_read]}); //view contents of buffer after reading/parsing is done
-    const parsed_req = http_request.parse_http_request(&req.reading_buffer) catch {
+    const parsed_req = http_request.parse_http_request(self.read_buffers[buffer_id][0..read_length]) catch {
         std.log.err("invalid HTTP request when parsing", .{});
         posix.close(req.client_socket);
         return;
