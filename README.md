@@ -12,7 +12,7 @@ zig build run
 ```
 
 ## Resources
-Here's a list of resources I used to help me create this project!
+Here's a list of resources I used to help me create this project
 - https://pedropark99.github.io/zig-book/Chapters/04-http-server.html
 - https://codeberg.org/dude_the_builder/subzed
 - https://unixism.net/loti/tutorial/webserver_liburing.html
