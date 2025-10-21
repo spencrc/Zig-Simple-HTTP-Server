@@ -29,7 +29,7 @@ read_buffers: [config.num_read_buffers][config.read_buffer_length]u8 = undefined
 read_buffers_left: usize = 0,
 
 pub fn init(allocator: std.mem.Allocator) !Server {
-    const ring = try IoUring.init(4096, 0);
+    const ring = try IoUring.init(config.io_uring_entries, 0);
 
     return .{
         .ring = ring,
@@ -51,7 +51,7 @@ pub fn run(self: *Server, address: std.net.Address) !void {
     try posix.setsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEPORT, &std.mem.toBytes(@as(c_int, 1)));
 
     try posix.bind(listener, &address.any, address.getOsSockLen());
-    try posix.listen(listener, 1024);
+    try posix.listen(listener, config.kernel_backlog);
 
     _ = try self.ring.provide_buffers(0xbf, @ptrCast(&self.read_buffers), config.read_buffer_length, config.num_read_buffers, config.read_buffer_group_id, 0);
 

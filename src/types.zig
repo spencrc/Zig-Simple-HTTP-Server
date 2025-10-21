@@ -8,6 +8,10 @@ pub const RingRequest = struct {
     event_type: EventType = undefined,
     client_socket: posix.socket_t = undefined,
     iovecs: [2]posix.iovec_const = undefined,
+    //according to http.zig, 220 is enough for:
+    // - the status
+    // - Content-Length header or Transfer-Encoding header
+    // - http.zig's longest supported content type (we only have one rn lol)
     header_buffer: [220]u8 = undefined,
     body: []const u8 = "",
     headers: []u8 = undefined,
