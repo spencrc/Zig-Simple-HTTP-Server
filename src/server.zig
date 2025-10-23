@@ -77,8 +77,10 @@ pub fn run(self: *Server, address: std.net.Address) !void {
 
         const req: *RingRequest = @ptrFromInt(cqe.user_data);
         if (cqe.res < 0) {
-            std.log.err("async requested failed - {d} for event {any}\n", .{ cqe.res, req.event_type });
-            return;
+            std.log.err("async requested failed - {d} for event {any}", .{ cqe.res, req.event_type });
+            posix.close(req.client_socket);
+            self.req_pool.destroy(req);
+            continue;
         }
 
         switch (req.event_type) {
@@ -103,14 +105,14 @@ pub fn run(self: *Server, address: std.net.Address) !void {
                 const read_length: usize = @intCast(cqe.res);
                 try self.handle_client_request(req, buffer_id, read_length);
 
-                // _ = try self.ring.provide_buffers(
-                //     0xbf1,
-                //     @ptrCast(&self.read_buffers[buffer_id]),
-                //     config.read_buffer_length,
-                //     1, // only one buffer
-                //     config.read_buffer_group_id,
-                //     buffer_id,
-                // );
+                _ = try self.ring.provide_buffers(
+                    0xbf1,
+                    @ptrCast(&self.read_buffers[buffer_id]),
+                    config.read_buffer_length,
+                    1, // only one buffer
+                    config.read_buffer_group_id,
+                    buffer_id,
+                );
 
                 self.req_pool.destroy(req);
                 // const elapsed_ns = timer.read();
