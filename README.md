@@ -1,5 +1,4 @@
 # Zig-Simple-HTTP-Server
-[![assetpack](https://img.shields.io/badge/assetpack-blue)](https://github.com/silversquirl/assetpack/)
 
 ## Building & Running
 Using Zig 0.15.2, you can build the project
