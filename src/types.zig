@@ -21,6 +21,7 @@ pub const RingRequest = struct {
 pub const HttpResponse = struct {
     status: u16 = 200,
     body: []const u8 = "",
+    type: []const u8 = "text/html",
 };
 
 pub const HttpRequest = struct {
