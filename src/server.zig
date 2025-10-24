@@ -56,7 +56,6 @@ pub fn run(self: *Server, address: std.net.Address) !void {
     _ = try self.ring.submit();
 
     while (true) {
-        //TODO: add threading here
         const cqe = try self.ring.copy_cqe();
 
         if (cqe.user_data == 0xbf) { //0xbf is the special code for when all buffers handled via provide_buffers completion
@@ -67,7 +66,7 @@ pub fn run(self: *Server, address: std.net.Address) !void {
                 return;
             }
         } else if (cqe.user_data == 0xbf1) { //0xbf1 is the special code for when just one buffer handled by provide_buffers completion
-            if (cqe.res == 0) { //0 means success here (https://ziglang.org/documentation/master/std/#std.os.linux.E)!
+            if (cqe.res == 0) {
                 self.read_buffers_left += 1; //one more buffer available
                 continue;
             } else {
@@ -85,16 +84,12 @@ pub fn run(self: *Server, address: std.net.Address) !void {
 
         switch (req.event_type) {
             .ACCEPT => {
-                //var timer = try std.time.Timer.start();
                 try self.queue_accept_request(listener, &client_address, &client_address_len);
                 self.req_pool.destroy(req);
                 try self.queue_read_request(cqe.res);
                 _ = try self.ring.submit();
-                // const elapsed_ns = timer.read();
-                // std.debug.print("Accepting took {d:.6}ms\n", .{@as(f64, @floatFromInt(elapsed_ns)) / 1_000_000});
             },
             .READ => {
-                //var timer = try std.time.Timer.start();
                 if (cqe.res <= 0) { //res = 0 is an empty result! anything less than 0 is an error
                     posix.close(req.client_socket);
                     self.req_pool.destroy(req);
@@ -115,11 +110,8 @@ pub fn run(self: *Server, address: std.net.Address) !void {
                 );
 
                 self.req_pool.destroy(req);
-                // const elapsed_ns = timer.read();
-                // std.debug.print("Reading took {d:.6}ms\n", .{@as(f64, @floatFromInt(elapsed_ns)) / 1_000_000});
             },
             .WRITE => {
-                // var timer = try std.time.Timer.start();
                 if (req.keep_alive) {
                     try self.queue_read_request(req.client_socket);
                     _ = try self.ring.submit();
@@ -127,8 +119,6 @@ pub fn run(self: *Server, address: std.net.Address) !void {
                     posix.close(req.client_socket);
                 }
                 self.req_pool.destroy(req);
-                // const elapsed_ns = timer.read();
-                // std.debug.print("Writing took {d:.6}ms\n", .{@as(f64, @floatFromInt(elapsed_ns)) / 1_000_000});
             },
         }
     }
@@ -166,7 +156,6 @@ fn queue_read_request(self: *Server, socket: posix.socket_t) !void {
 }
 
 fn handle_client_request(self: *Server, req: *RingRequest, buffer_id: u16, read_length: usize) !void {
-    //var timer = try std.time.Timer.start();
     //std.debug.print("\nClient Request\n{s}\n\n", .{self.read_buffers[buffer_id][0..read_length]}); //view contents of buffer after reading/parsing is done
     const parsed_http_req: HttpRequest = parser.parse(self.read_buffers[buffer_id][0..read_length]) catch {
         std.log.err("invalid HTTP request when parsing", .{});
@@ -179,15 +168,12 @@ fn handle_client_request(self: *Server, req: *RingRequest, buffer_id: u16, read_
         const file_data = static.files.get(parsed_http_req.uri.path);
         if (file_data != null) {
             http_res.status = 200;
-            http_res.body = file_data.?.contents;
-            http_res.type = file_data.?.mime_type;
+            http_res.body = file_data.?.contents[0..];
+            http_res.type = file_data.?.mime_type[0..];
         } else {
-            http_res.type = "html/text";
             http_res.status = 404;
             http_res.body = "<html><body><h1>File not found!</h1></body></html>";
         }
-        // const elapsed_ns = timer.read();
-        // std.debug.print("handle_client_request took {d:.6}ms\n", .{@as(f64, @floatFromInt(elapsed_ns)) / 1_000_000});
         try self.submit_write_request(req.client_socket, parsed_http_req.keep_alive, http_res);
     } else {
         std.log.warn("encountered a non GET method!", .{});
@@ -196,7 +182,6 @@ fn handle_client_request(self: *Server, req: *RingRequest, buffer_id: u16, read_
 }
 
 fn submit_write_request(self: *Server, client_socket: posix.socket_t, keep_alive: bool, http_res: HttpResponse) !void {
-    //var timer = try std.time.Timer.start();
     const req: *RingRequest = try self.req_pool.create();
     req.event_type = EventType.WRITE;
     req.client_socket = client_socket;
@@ -206,10 +191,7 @@ fn submit_write_request(self: *Server, client_socket: posix.socket_t, keep_alive
     const body_len = req.body.len;
     const keep_alive_string = if (keep_alive) "keep-alive" else "close";
 
-    var fbs = std.io.fixedBufferStream(&req.header_buffer);
-    const writer = fbs.writer();
-    try writer.print(HEADER_TEMPLATE, .{ http_res.status, body_len, http_res.type, keep_alive_string });
-    req.headers = fbs.getWritten();
+    req.headers = try std.fmt.bufPrint(&req.header_buffer, HEADER_TEMPLATE, .{ http_res.status, body_len, http_res.type, keep_alive_string });
 
     req.iovecs = .{ .{ .base = req.headers.ptr, .len = req.headers.len }, .{ .base = req.body.ptr, .len = body_len } };
 
@@ -217,6 +199,4 @@ fn submit_write_request(self: *Server, client_socket: posix.socket_t, keep_alive
 
     _ = try self.ring.writev(user_data, req.client_socket, req.iovecs[0..], 0);
     _ = try self.ring.submit();
-    // const elapsed_ns = timer.read();
-    // std.debug.print("submit_write_request took {d:.6}ms\n", .{@as(f64, @floatFromInt(elapsed_ns)) / 1_000_000});
 }
