@@ -40,6 +40,7 @@ pub fn build(b: *std.Build) void {
         if (entry.kind == .file) {
             writer_interface.print(".{{\"/{s}\", FileData{{ .contents = @embedFile(\"static/{s}\"), .mime_type = \"{s}\" }}}},\n", .{ entry.basename, entry.basename, get_mime_type(entry.basename) }) catch @panic("write failed");
         }
+        //TODO: handle entry.kind == .directory, and then recursively go through each directory so all files can be found and added!
     }
 
     _ = writer_interface.writeAll("});") catch @panic("write failed");
