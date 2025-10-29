@@ -7,7 +7,8 @@ const config = @import("config");
 const types = @import("types.zig");
 const parser = @import("parser.zig");
 
-const IoUring = std.os.linux.IoUring;
+const linux = std.os.linux;
+const IoUring = linux.IoUring;
 const RingRequest = types.RingRequest;
 const Method = types.Method;
 const HttpRequest = types.HttpRequest;
@@ -75,11 +76,20 @@ pub fn run(self: *Server, address: std.net.Address) !void {
         }
 
         const req: *RingRequest = @ptrFromInt(cqe.user_data);
-        if (cqe.res < 0) {
-            std.log.err("async requested failed - {d} for event {any}", .{ cqe.res, req.event_type });
-            posix.close(req.client_socket);
-            self.req_pool.destroy(req);
-            continue;
+        switch (cqe.err()) {
+            .SUCCESS, .ALREADY => {},
+            .INTR, .CANCELED => continue,
+            .TIME => {
+                posix.close(req.client_socket);
+                self.req_pool.destroy(req);
+                continue;
+            },
+            else => |err| {
+                std.log.err("async requested failed - {any} for event {any}", .{ err, req.event_type });
+                posix.close(req.client_socket);
+                self.req_pool.destroy(req);
+                continue;
+            },
         }
 
         switch (req.event_type) {
@@ -152,7 +162,10 @@ fn queue_read_request(self: *Server, socket: posix.socket_t) !void {
     }
     const read_buffer = IoUring.ReadBuffer{ .buffer_selection = .{ .group_id = config.read_buffer_group_id, .len = config.read_buffer_length } };
 
-    _ = try self.ring.read(user_data, req.client_socket, read_buffer, 0); //for whatever reason, read seems to be more stable than recv during benchmarking
+    var sqe = try self.ring.read(user_data, req.client_socket, read_buffer, 0); //for whatever reason, read seems to be more stable than recv during benchmarking
+    sqe.flags |= linux.IOSQE_IO_LINK;
+    const ts = linux.kernel_timespec{ .sec = config.read_timeout_s, .nsec = 0 };
+    _ = try self.ring.link_timeout(user_data, &ts, 0);
 }
 
 fn handle_client_request(self: *Server, req: *RingRequest, buffer_id: u16, read_length: usize) !void {
@@ -197,6 +210,9 @@ fn submit_write_request(self: *Server, client_socket: posix.socket_t, keep_alive
 
     const user_data = @intFromPtr(req);
 
-    _ = try self.ring.writev(user_data, req.client_socket, req.iovecs[0..], 0);
+    var sqe = try self.ring.writev(user_data, req.client_socket, req.iovecs[0..], 0);
+    sqe.flags |= linux.IOSQE_IO_LINK;
+    const ts = linux.kernel_timespec{ .sec = config.write_timeout_s, .nsec = 0 };
+    _ = try self.ring.link_timeout(user_data, &ts, 0);
     _ = try self.ring.submit();
 }

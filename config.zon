@@ -12,4 +12,7 @@
     .max_headers = 64,
     .max_uri_len = 8000,
     .max_request_len = 16384,
+
+    .read_timeout_s = 5,
+    .write_timeout_s = 5,
 }
